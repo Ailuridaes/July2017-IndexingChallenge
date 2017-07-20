@@ -5,9 +5,12 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Threading.Tasks;
-
+using Amazon.S3;
+using S3Model = Amazon.S3.Model;
+using Amazon.Lambda.S3Events;
 using Amazon.Lambda.Core;
 using Newtonsoft.Json;
+using System.IO;
 
 // Assembly attribute to enable the Lambda function's JSON input to be converted into a .NET class.
 [assembly: LambdaSerializer(typeof(Amazon.Lambda.Serialization.Json.JsonSerializer))]
@@ -80,10 +83,24 @@ namespace TriggerFunction {
         private static readonly Uri _esDomain = new Uri("https://TODO");
         
         //--- Methods ---
-        public void FunctionHandler(Hero hero, ILambdaContext context) {
-            LambdaLogger.Log($"received hero: {hero.ToString()}");
-            
-            //TODO: index to elastic search
+        public async Task FunctionHandler(S3Event uploadEvent, ILambdaContext context) {
+            string bucket = uploadEvent.Records[0].S3.Bucket.Name;
+            string objectKey = uploadEvent.Records[0].S3.Object.Key;
+
+            using (var client = new AmazonS3Client(Amazon.RegionEndpoint.USEast1)) {
+                S3Model.GetObjectRequest request = new S3Model.GetObjectRequest {
+                    BucketName = bucket,
+                    Key = objectKey
+                };
+                
+                using (S3Model.GetObjectResponse response = await client.GetObjectAsync(request)) 
+                using (Stream responseStream = response.ResponseStream) 
+                using (StreamReader reader = new StreamReader(responseStream)) {
+                    while(reader.Peek() >= 0) {
+                        LambdaLogger.Log($"{reader.ReadLine().Replace("\t", " | ")}");
+                    }
+                }
+            }
         }
     }
 }
